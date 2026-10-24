@@ -1,44 +1,55 @@
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 
-#include <nlohmann/json.hpp>
-#include <spdlog/spdlog.h>
+#include "ConfigurationManager.h"
+#include "Logger.h"
 
-int main()
+int main(int argc, char* argv[])
 {
+    if (argc > 2)
+    {
+        std::cerr
+            << "Usage: transcription_app [config-file]\n";
+        return 1;
+    }
+
+    std::shared_ptr<spdlog::logger> logger;
+
     try
     {
-        spdlog::set_pattern("[%H:%M:%S] [%l] %v");
+        const std::string configPath =
+            argc == 2 ? argv[1] : "config/config.json";
 
-        spdlog::info("Transcription pipeline started.");
+        const AppConfig config =
+            ConfigurationManager::load(configPath);
 
-        // Temporary in-memory configuration to verify JSON support.
-        const nlohmann::json config = {
-            {"application_name", "TranscriptionPipeline"},
-            {"language", "en"},
-            {"threads", 4}
-        };
+        logger = Logger::create(config.logging);
 
-        const auto applicationName =
-            config.at("application_name").get<std::string>();
+        logger->info("Configuration loaded successfully.");
+        logger->info("Language: {}", config.language);
+        logger->info("Threads: {}", config.threads);
+        logger->debug("Debug logging is enabled.");
+        logger->info("Configuration and logging setup complete.");
 
-        const auto language =
-            config.at("language").get<std::string>();
-
-        const auto threads =
-            config.at("threads").get<int>();
-
-        spdlog::info("Application: {}", applicationName);
-        spdlog::info("Language: {}", language);
-        spdlog::info("Threads: {}", threads);
-        spdlog::info("JSON and logging dependencies are working.");
-
+        logger->flush();
         return 0;
     }
     catch (const std::exception& error)
     {
-        std::cerr << "Startup failed: " << error.what() << '\n';
+        if (logger)
+        {
+            logger->error("Application failed: {}", error.what());
+            logger->flush();
+        }
+        else
+        {
+            // Configuration or logger initialization failed.
+            std::cerr << "Startup failed: "
+                      << error.what() << '\n';
+        }
+
         return 1;
     }
 }

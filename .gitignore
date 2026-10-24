@@ -70,4 +70,5 @@ Testing/
 /build/
 /out/
 /.vs/
+/logs/
 CMakeUserPresets.json

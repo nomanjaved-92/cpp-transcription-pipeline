@@ -1,0 +1,10 @@
+{
+  "language": "en",
+  "threads": 4,
+  "logging": {
+    "level": "info",
+    "file": "logs/transcription.log",
+    "max_size_mb": 5,
+    "max_files": 3
+  }
+}
