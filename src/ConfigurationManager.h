@@ -6,6 +6,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <cctype>
+#include <vector>
+
 struct LoggingConfig
 {
     std::string level = "info";
@@ -20,6 +24,9 @@ struct AppConfig
     int threads = 4;
     std::string modelPath = "models/ggml-base.en.bin";
     std::string ffmpegPath = "D:/Tools/ffmpeg/bin/ffmpeg.exe";
+    std::vector<std::string> allowedExtensions{
+    ".wav", ".mp3", ".m4a", ".flac"
+    };
     LoggingConfig logging;
 };
 
@@ -107,6 +114,68 @@ public:
         if (config.ffmpegPath.empty())
         {
             throw std::runtime_error("'ffmpeg_path' must not be empty.");
+        }
+
+        if (json.contains("allowed_extensions"))
+        {
+            const auto& extensions = json.at("allowed_extensions");
+
+            if (!extensions.is_array() || extensions.empty())
+            {
+                throw std::runtime_error(
+                    "'allowed_extensions' must be a non-empty array.");
+            }
+
+            config.allowedExtensions.clear();
+
+            for (const auto& item : extensions)
+            {
+                if (!item.is_string())
+                {
+                    throw std::runtime_error(
+                        "Each allowed extension must be a string.");
+                }
+
+                auto extension = item.get<std::string>();
+
+                std::transform(
+                    extension.begin(),
+                    extension.end(),
+                    extension.begin(),
+                    [](unsigned char character)
+                    {
+                        return static_cast<char>(std::tolower(character));
+                    });
+
+                if (extension.size() < 2 || extension.front() != '.')
+                {
+                    throw std::runtime_error(
+                        "Extensions must start with a dot, for example '.mp3'.");
+                }
+
+                const bool valid = std::all_of(
+                    extension.begin() + 1,
+                    extension.end(),
+                    [](unsigned char character)
+                    {
+                        return (character >= 'a' && character <= 'z') ||
+                            (character >= '0' && character <= '9');
+                    });
+
+                if (!valid)
+                {
+                    throw std::runtime_error(
+                        "Invalid audio extension: " + extension);
+                }
+
+                if (std::find(
+                    config.allowedExtensions.begin(),
+                    config.allowedExtensions.end(),
+                    extension) == config.allowedExtensions.end())
+                {
+                    config.allowedExtensions.push_back(extension);
+                }
+            }
         }
         return config;
     }

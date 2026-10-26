@@ -3,6 +3,7 @@
   "threads": 4,
   "model_path": "models/ggml-base.en.bin",
   "ffmpeg_path": "D:/Tools/ffmpeg/bin/ffmpeg.exe",
+  "allowed_extensions": [ ".wav", ".mp3", ".m4a", ".flac" ],
   "logging": {
     "level": "info",
     "file": "logs/transcription.log",

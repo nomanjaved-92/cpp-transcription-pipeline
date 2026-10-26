@@ -7,6 +7,9 @@
 
 #include <whisper.h>
 
+#include <algorithm>
+#include <cctype>
+
 #include "ConfigurationManager.h"
 #include "Logger.h"
 
@@ -48,6 +51,43 @@ int main(int argc, char* argv[])
 
         logger = Logger::create(config.logging);
         logger->info("Configuration loaded successfully.");
+
+        if (!std::filesystem::is_regular_file(audioPath))
+        {
+            throw std::runtime_error(
+                "Audio file not found: " + audioPath);
+        }
+
+        if (std::filesystem::file_size(audioPath) == 0)
+        {
+            throw std::runtime_error("Audio file is empty.");
+        }
+
+        auto extension =
+            std::filesystem::path(audioPath).extension().string();
+
+        std::transform(
+            extension.begin(),
+            extension.end(),
+            extension.begin(),
+            [](unsigned char character)
+            {
+                return static_cast<char>(std::tolower(character));
+            });
+
+        const auto found = std::find(
+            config.allowedExtensions.begin(),
+            config.allowedExtensions.end(),
+            extension);
+
+        if (found == config.allowedExtensions.end())
+        {
+            throw std::runtime_error(
+                "Audio extension is not allowed by configuration: " +
+                extension);
+        }
+
+        logger->info("Input validation passed.");
 
         if (!std::filesystem::is_regular_file(config.modelPath))
         {
