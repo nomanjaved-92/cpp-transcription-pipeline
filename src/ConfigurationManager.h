@@ -18,6 +18,7 @@ struct AppConfig
 {
     std::string language = "en";
     int threads = 4;
+    std::string modelPath = "models/ggml-base.en.bin";
     LoggingConfig logging;
 };
 
@@ -45,6 +46,13 @@ public:
         AppConfig config;
 
         config.language = json.value("language", config.language);
+        config.modelPath = json.value("model_path", config.modelPath);
+
+        if (config.modelPath.empty())
+        {
+           throw std::runtime_error(
+               "'model_path' must not be empty.");
+        }
         config.threads = readInteger(
             json, "threads", config.threads, 1, 64);
 

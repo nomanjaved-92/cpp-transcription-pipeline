@@ -23,7 +23,21 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-FetchContent_MakeAvailable(json spdlog)
+# Build Whisper as a static, CPU-only library.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(GGML_CUDA OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    whisper
+    GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
+    GIT_TAG v1.7.6
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(json spdlog whisper)
 
 add_executable(transcription_app
     src/main.cpp
@@ -38,6 +52,7 @@ set_target_properties(transcription_app PROPERTIES
 target_link_libraries(transcription_app PRIVATE
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    whisper
 )
 
 if(MSVC)

@@ -1,6 +1,7 @@
 {
   "language": "en",
   "threads": 4,
+  "model_path": "models/ggml-base.en.bin",
   "logging": {
     "level": "info",
     "file": "logs/transcription.log",

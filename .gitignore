@@ -72,3 +72,10 @@ Testing/
 /.vs/
 /logs/
 CMakeUserPresets.json
+
+# Local recordings and generated results
+/samples/
+/output/
+
+# Downloaded speech models
+/models/
