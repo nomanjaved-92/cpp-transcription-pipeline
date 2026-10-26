@@ -14,15 +14,16 @@
 #include <nlohmann/json.hpp>
 
 #include "AudioReader.h"
+#include "AudioConverter.h"
 
 int main(int argc, char* argv[])
 {
 
    if (argc < 3 || argc > 4)
    {
-        std::cerr
-        << "Usage: transcription_app <input.wav> <output.json> "
-        << "[config-file]\n";
+       std::cerr
+           << "Usage: transcription_app <audio-file> <output.json> "
+           << "[config-file]\n";
         return 1;
    }
 
@@ -89,7 +90,16 @@ int main(int argc, char* argv[])
                 "This model supports English only.");
         }
 
-        const auto samples = AudioReader::readWav(audioPath);
+        logger->info("Converting input audio to normalized WAV.");
+
+        AudioConverter converter;
+
+        const auto normalizedPath =
+            converter.convert(config.ffmpegPath, audioPath);
+
+        const auto samples = AudioReader::readWav(normalizedPath);
+
+        logger->info("Audio conversion completed.");
 
         logger->info(
             "Audio loaded: {:.2f} seconds.",

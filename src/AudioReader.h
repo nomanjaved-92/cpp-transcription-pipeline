@@ -5,17 +5,18 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 class AudioReader
 {
 public:
-    static std::vector<float> readWav(const std::string& path)
+    static std::vector<float> readWav(const std::filesystem::path& path)
     {
         std::ifstream input(path, std::ios::binary | std::ios::ate);
 
         if (!input)
         {
-            throw std::runtime_error("Cannot open audio: " + path);
+            throw std::runtime_error("Cannot open audio: " + path.string());
         }
 
         const auto length = input.tellg();

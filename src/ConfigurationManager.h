@@ -19,6 +19,7 @@ struct AppConfig
     std::string language = "en";
     int threads = 4;
     std::string modelPath = "models/ggml-base.en.bin";
+    std::string ffmpegPath = "D:/Tools/ffmpeg/bin/ffmpeg.exe";
     LoggingConfig logging;
 };
 
@@ -101,7 +102,12 @@ public:
             throw std::runtime_error(
                 "Invalid logging level: " + level);
         }
+        config.ffmpegPath = json.value("ffmpeg_path", config.ffmpegPath);
 
+        if (config.ffmpegPath.empty())
+        {
+            throw std::runtime_error("'ffmpeg_path' must not be empty.");
+        }
         return config;
     }
 
