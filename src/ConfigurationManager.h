@@ -27,6 +27,7 @@ struct AppConfig
     std::vector<std::string> allowedExtensions{
     ".wav", ".mp3", ".m4a", ".flac"
     };
+    int chunkSeconds = 30;
     LoggingConfig logging;
 };
 
@@ -177,6 +178,9 @@ public:
                 }
             }
         }
+
+        config.chunkSeconds = readInteger(
+            json, "chunk_seconds", config.chunkSeconds, 5, 300);
         return config;
     }
 

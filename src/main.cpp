@@ -4,7 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-
+#include <cstdint>
 #include <whisper.h>
 
 #include <algorithm>
@@ -16,7 +16,7 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
-#include "AudioReader.h"
+#include "PcmChunkReader.h"
 #include "AudioConverter.h"
 
 int main(int argc, char* argv[])
@@ -130,107 +130,143 @@ int main(int argc, char* argv[])
                 "This model supports English only.");
         }
 
-        logger->info("Converting input audio to normalized WAV.");
+        logger->info("Converting input audio to normalized PCM.");
 
         AudioConverter converter;
 
         const auto normalizedPath =
             converter.convert(config.ffmpegPath, audioPath);
 
-        const auto samples = AudioReader::readWav(normalizedPath);
-
-        logger->info("Audio conversion completed.");
+        PcmChunkReader reader(normalizedPath);
 
         logger->info(
-            "Audio loaded: {:.2f} seconds.",
-            static_cast<double>(samples.size()) / 16000.0);
-
-        auto options =
-            whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-
-        options.n_threads = config.threads;
-        options.language = config.language.c_str();
-        options.translate = false;
-        options.no_context = true;
-        options.no_timestamps = false;
-        options.print_realtime = false;
-        options.print_progress = false;
-        options.print_timestamps = false;
-        options.print_special = false;
-
-        logger->info("Transcription started.");
-
-        const int status = whisper_full(
-            context.get(),
-            options,
-            samples.data(),
-            static_cast<int>(samples.size()));
-
-        if (status != 0)
-        {
-            throw std::runtime_error(
-                "Whisper transcription failed with code: " +
-                std::to_string(status));
-        }
+            "Audio duration: {:.2f} seconds. Chunk size: {} seconds.",
+            reader.durationSeconds(),
+            config.chunkSeconds);
 
         nlohmann::json segments = nlohmann::json::array();
         std::string fullText;
 
-        const int segmentCount =
-            whisper_full_n_segments(context.get());
+        std::uint64_t processedSamples = 0;
+        std::size_t chunkIndex = 0;
 
-        for (int i = 0; i < segmentCount; ++i)
+        while (true)
         {
-            const char* segmentText =
-                whisper_full_get_segment_text(context.get(), i);
+            const auto samples = reader.readNext(config.chunkSeconds);
 
-            if (!segmentText)
+            if (samples.empty())
             {
-                throw std::runtime_error("Whisper returned null segment text.");
+                break;
             }
 
-            std::string text(segmentText);
+            ++chunkIndex;
 
-            // Trim surrounding whitespace without changing recognized words.
-            const auto first = text.find_first_not_of(" \t\r\n");
+            const double offset =
+                static_cast<double>(processedSamples) / 16000.0;
 
-            if (first == std::string::npos)
+            const double chunkDuration =
+                static_cast<double>(samples.size()) / 16000.0;
+
+            logger->info(
+                "Processing chunk {}: {:.2f} to {:.2f} seconds.",
+                chunkIndex,
+                offset,
+                offset + chunkDuration);
+
+            auto options =
+                whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+
+            options.n_threads = config.threads;
+            options.language = config.language.c_str();
+            options.translate = false;
+            options.no_context = true;
+            options.no_timestamps = false;
+            options.print_realtime = false;
+            options.print_progress = false;
+            options.print_timestamps = false;
+            options.print_special = false;
+
+            const int status = whisper_full(
+                context.get(),
+                options,
+                samples.data(),
+                static_cast<int>(samples.size()));
+
+            if (status != 0)
             {
-                continue;
+                throw std::runtime_error(
+                    "Transcription failed for chunk " +
+                    std::to_string(chunkIndex) +
+                    " with code " + std::to_string(status));
             }
 
-            const auto last = text.find_last_not_of(" \t\r\n");
-            text = text.substr(first, last - first + 1);
+            const int segmentCount =
+                whisper_full_n_segments(context.get());
 
-            // Whisper timestamps use units of 10 milliseconds.
-            const double start =
-                static_cast<double>(
-                    whisper_full_get_segment_t0(context.get(), i)) / 100.0;
-
-            const double end =
-                static_cast<double>(
-                    whisper_full_get_segment_t1(context.get(), i)) / 100.0;
-
-            segments.push_back({
-                {"start", start},
-                {"end", end},
-                {"text", text}
-            });
-
-            if (!fullText.empty())
+            for (int i = 0; i < segmentCount; ++i)
             {
-                fullText += ' ';
+                const char* segmentText =
+                    whisper_full_get_segment_text(context.get(), i);
+
+                if (!segmentText)
+                {
+                    throw std::runtime_error(
+                        "Whisper returned null segment text.");
+                }
+
+                std::string text(segmentText);
+
+                const auto first = text.find_first_not_of(" \t\r\n");
+
+                if (first == std::string::npos)
+                {
+                    continue;
+                }
+
+                const auto last = text.find_last_not_of(" \t\r\n");
+                text = text.substr(first, last - first + 1);
+
+                const double localStart =
+                    static_cast<double>(
+                        whisper_full_get_segment_t0(context.get(), i)) / 100.0;
+
+                const double localEnd =
+                    static_cast<double>(
+                        whisper_full_get_segment_t1(context.get(), i)) / 100.0;
+
+                // Keep timestamps within the current chunk's audio range.
+                const double start =
+                    std::clamp(localStart, 0.0, chunkDuration);
+
+                const double end =
+                    std::clamp(localEnd, start, chunkDuration);
+
+                segments.push_back({
+                    { "start", offset + start },
+                    { "end", offset + end },
+                    { "text", text }
+                    });
+
+                if (!fullText.empty())
+                {
+                    fullText += ' ';
+                }
+
+                fullText += text;
             }
 
-            fullText += text;
+            processedSamples +=
+                static_cast<std::uint64_t>(samples.size());
+
+            logger->info("Chunk {} completed.", chunkIndex);
         }
 
         const nlohmann::json result = {
-            {"language", config.language},
-            {"duration_seconds",
-                static_cast<double>(samples.size()) / 16000.0},
-            {"text", fullText},
-            {"segments", segments}
+            { "language", config.language },
+            { "duration_seconds", reader.durationSeconds() },
+            { "chunks_processed", chunkIndex },
+            { "text", fullText },
+            { "segments", segments }
         };
 
         if (outputPath.has_parent_path())

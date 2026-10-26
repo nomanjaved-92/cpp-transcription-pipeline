@@ -67,7 +67,7 @@ public:
         const auto inputPath =
             std::filesystem::absolute(input);
 
-        const auto outputPath = directory_ / "normalized.wav";
+        const auto outputPath = directory_ / "normalized.pcm";
 
         // _wspawnv launches the executable directly.
         // File arguments are quoted to preserve spaces in paths.
@@ -82,7 +82,7 @@ public:
             L"-ac", L"1",
             L"-ar", L"16000",
             L"-c:a", L"pcm_s16le",
-            L"-f", L"wav",
+            L"-f", L"s16le",
             quotePath(outputPath)
         };
 
