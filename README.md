@@ -218,4 +218,3 @@ This is manual validation, not an automated test suite.
 ## Further Documentation
 
 - [Service design](docs/design.md)
-- [Demo walkthrough](docs/demo.md)
