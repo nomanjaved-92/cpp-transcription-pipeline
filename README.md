@@ -63,6 +63,29 @@ cmake --build build --config Release --parallel
 If using another Visual Studio version, select its corresponding CMake
 generator.
 
+### Download the English Model
+
+From the repository root, run:
+
+```cmd
+if not exist models mkdir models
+curl.exe --fail --location --output models\ggml-base.en.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
+```
+
+Download this once before running the application.
+The model is excluded from Git.
+
+### Configure FFmpeg
+
+Install FFmpeg separately and set `ffmpeg_path` in
+`config/config.json` to the full path of `ffmpeg.exe`.
+
+Verify that executable, for example:
+
+```cmd
+"D:\Tools\ffmpeg\bin\ffmpeg.exe" -version
+```
+
 ## Configuration
 
 Example `config/config.json`:
@@ -94,13 +117,13 @@ compatible multilingual model.
 ## Usage
 
 ```cmd
-build\Release\transcription_app.exe "samples\demo.mp3" "output\demo.json"
+build\Release\transcription_app.exe "examples\demo.mp3" "output\demo.json"
 ```
 
 Optional configuration file:
 
 ```cmd
-build\Release\transcription_app.exe "samples\demo.mp3" "output\custom.json" "config\config.json"
+build\Release\transcription_app.exe "examples\demo.mp3" "output\custom.json" "config\config.json"
 ```
 
 Choose a new output filename for each run.
@@ -135,6 +158,18 @@ the original recording.
 
 Downstream applications can consume `text` for text processing and
 `segments` for timestamp-based navigation.
+
+## Included Example
+
+- `examples/demo.mp3`: demonstration recording.
+- `examples/demo.transcript.json`: actual output from the application.
+
+Recognition errors are retained in the example output.
+Results can vary with the model, configuration, and runtime environment.
+
+To reproduce the example, use the supplied configuration with
+`chunk_seconds` set to 30. Write the new result to a different filename
+because the application rejects existing output paths.
 
 ## Processing Flow
 

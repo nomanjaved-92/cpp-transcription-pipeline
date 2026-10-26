@@ -25,7 +25,7 @@ Use chunk_seconds = 10 to demonstrate multiple chunks with the
 Choose an output filename that does not already exist:
 
 ```cmd
-build\Release\transcription_app.exe "samples\demo.mp3" "output\interview_demo.json"
+build\Release\transcription_app.exe "examples\demo.mp3" "output\interview_demo.json"
 echo %ERRORLEVEL%
 ```
 
