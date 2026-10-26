@@ -10,21 +10,37 @@
 #include "ConfigurationManager.h"
 #include "Logger.h"
 
+#include <fstream>
+#include <nlohmann/json.hpp>
+
+#include "AudioReader.h"
+
 int main(int argc, char* argv[])
 {
-    if (argc > 2)
-    {
+
+   if (argc < 3 || argc > 4)
+   {
         std::cerr
-            << "Usage: transcription_app [config-file]\n";
+        << "Usage: transcription_app <input.wav> <output.json> "
+        << "[config-file]\n";
         return 1;
-    }
+   }
 
     std::shared_ptr<spdlog::logger> logger;
 
     try
     {
-        const std::string configPath =
-            argc == 2 ? argv[1] : "config/config.json";
+     const std::string audioPath = argv[1];
+     const std::filesystem::path outputPath = argv[2];
+
+     const std::string configPath =
+     argc == 4 ? argv[3] : "config/config.json";
+
+     if (std::filesystem::exists(outputPath))
+     {
+         throw std::runtime_error(
+             "Output already exists. Choose a new output filename.");
+     }
 
         const AppConfig config =
             ConfigurationManager::load(configPath);
@@ -59,7 +75,138 @@ int main(int argc, char* argv[])
         }
 
         logger->info("Whisper model loaded successfully.");
-        logger->info("C++ library integration check passed.");
+
+        if (whisper_lang_id(config.language.c_str()) < 0)
+        {
+            throw std::runtime_error(
+                "Unsupported language: " + config.language);
+        }
+
+        if (!whisper_is_multilingual(context.get()) &&
+            config.language != "en")
+        {
+            throw std::runtime_error(
+                "This model supports English only.");
+        }
+
+        const auto samples = AudioReader::readWav(audioPath);
+
+        logger->info(
+            "Audio loaded: {:.2f} seconds.",
+            static_cast<double>(samples.size()) / 16000.0);
+
+        auto options =
+            whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+
+        options.n_threads = config.threads;
+        options.language = config.language.c_str();
+        options.translate = false;
+        options.no_context = true;
+        options.no_timestamps = false;
+        options.print_realtime = false;
+        options.print_progress = false;
+        options.print_timestamps = false;
+        options.print_special = false;
+
+        logger->info("Transcription started.");
+
+        const int status = whisper_full(
+            context.get(),
+            options,
+            samples.data(),
+            static_cast<int>(samples.size()));
+
+        if (status != 0)
+        {
+            throw std::runtime_error(
+                "Whisper transcription failed with code: " +
+                std::to_string(status));
+        }
+
+        nlohmann::json segments = nlohmann::json::array();
+        std::string fullText;
+
+        const int segmentCount =
+            whisper_full_n_segments(context.get());
+
+        for (int i = 0; i < segmentCount; ++i)
+        {
+            const char* segmentText =
+                whisper_full_get_segment_text(context.get(), i);
+
+            if (!segmentText)
+            {
+                throw std::runtime_error("Whisper returned null segment text.");
+            }
+
+            std::string text(segmentText);
+
+            // Trim surrounding whitespace without changing recognized words.
+            const auto first = text.find_first_not_of(" \t\r\n");
+
+            if (first == std::string::npos)
+            {
+                continue;
+            }
+
+            const auto last = text.find_last_not_of(" \t\r\n");
+            text = text.substr(first, last - first + 1);
+
+            // Whisper timestamps use units of 10 milliseconds.
+            const double start =
+                static_cast<double>(
+                    whisper_full_get_segment_t0(context.get(), i)) / 100.0;
+
+            const double end =
+                static_cast<double>(
+                    whisper_full_get_segment_t1(context.get(), i)) / 100.0;
+
+            segments.push_back({
+                {"start", start},
+                {"end", end},
+                {"text", text}
+            });
+
+            if (!fullText.empty())
+            {
+                fullText += ' ';
+            }
+
+            fullText += text;
+        }
+
+        const nlohmann::json result = {
+            {"language", config.language},
+            {"duration_seconds",
+                static_cast<double>(samples.size()) / 16000.0},
+            {"text", fullText},
+            {"segments", segments}
+        };
+
+        if (outputPath.has_parent_path())
+        {
+            std::filesystem::create_directories(
+                outputPath.parent_path());
+        }
+
+        std::ofstream output(outputPath, std::ios::binary);
+
+        if (!output)
+        {
+            throw std::runtime_error("Cannot open output file.");
+        }
+
+        output << result.dump(2) << '\n';
+        output.close();
+
+        if (!output)
+        {
+            throw std::runtime_error("Failed to write complete transcript.");
+        }
+
+        logger->info(
+            "Transcription complete: {} segments saved.",
+            segments.size());
 
         logger->flush();
         return 0;
